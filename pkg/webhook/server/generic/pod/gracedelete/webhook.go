@@ -38,6 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	updatePodDeletionIndicationLabelInterval = 30 * 1000 * 1000 * 1000
+)
+
 func init() {
 	pod.RegisterAdmissionWebhook(New())
 }
@@ -89,6 +93,15 @@ func (gd *GraceDelete) Validating(ctx context.Context, c client.Client, oldPod, 
 		if newPod.Labels == nil {
 			newPod.Labels = map[string]string{}
 		}
+
+		// update PodDeletionIndicationLabel every updatePodDeletionIndicationLabelInterval, default 30s
+		if timestamp, ok := newPod.Labels[appsv1alpha1.PodDeletionIndicationLabelKey]; ok {
+			unixNano, err := strconv.ParseInt(timestamp, 10, 64)
+			if err == nil && time.Now().UnixNano()-unixNano < int64(updatePodDeletionIndicationLabelInterval) {
+				return nil
+			}
+		}
+
 		newPod.Labels[appsv1alpha1.PodDeletionIndicationLabelKey] = strconv.FormatInt(time.Now().UnixNano(), 10)
 
 		return c.Update(ctx, newPod)
